@@ -10,21 +10,52 @@
 from __future__ import annotations
 
 import ctypes
+import json
+import os
 import sys
 import threading
 import time
 import tkinter as tk
+import webbrowser
 from ctypes import wintypes
 from dataclasses import dataclass
 from pathlib import Path
 from tkinter import ttk
 
-APP_TITLE = "Универсальный кликер"
+APP_VERSION = "1.1.0"
+REPO_URL = "https://github.com/glor2w/universal-clicker"
+DEFAULT_LANGUAGE = "en"
+LANGUAGE_NAMES = {"en": "English", "ru": "Русский"}
+SETTINGS_FILE = (
+    Path(os.environ.get("APPDATA", str(Path.home())))
+    / "UniversalClicker"
+    / "settings.json"
+)
 
 
 def resource_path(*parts: str) -> str:
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
     return str(base.joinpath(*parts))
+
+
+def load_language() -> str:
+    try:
+        data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return DEFAULT_LANGUAGE
+    language = data.get("language")
+    return language if language in LANGUAGE_NAMES else DEFAULT_LANGUAGE
+
+
+def save_language(language: str) -> None:
+    try:
+        SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        SETTINGS_FILE.write_text(
+            json.dumps({"language": language}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
 
 # --- Win32 -----------------------------------------------------------------
 
@@ -169,7 +200,6 @@ class Settings:
     mode: str                # click | hold
     mouse_button: str = "left"
     vk: int = 0x20
-    key_name: str = "ПРОБЕЛ"
     cps: float = 100.0       # 0 — без ограничения
     press_ms: float = 0.0
 
@@ -254,9 +284,7 @@ class ClickerEngine:
             code = ctypes.get_last_error()
             if code:
                 raise OSError(f"SendInput: {ctypes.FormatError(code)}")
-            raise RuntimeError(
-                "Windows заблокировал ввод. Запустите кликер от имени администратора."
-            )
+            raise RuntimeError("input_blocked")
 
     def _edge_events(self, settings: Settings):
         if settings.target == "mouse":
@@ -399,24 +427,160 @@ DANGER_HOVER = "#ff7583"
 OK = "#3ddc84"
 FONT = "Segoe UI"
 
-MOUSE_LABELS = {"left": "Левая", "right": "Правая", "middle": "Средняя"}
-MOUSE_KEYS = {label: key for key, label in MOUSE_LABELS.items()}
+STRINGS = {
+    "en": {
+        "app_title": "Universal Clicker",
+        "subtitle": "Mouse & keyboard  ·  global start with F6",
+        "tab_single": "Single",
+        "tab_combo": "Combo",
+        "section_target": "1  ·  TARGET",
+        "target_mouse": "Mouse",
+        "target_keyboard": "Keyboard",
+        "mouse_button": "Mouse button",
+        "key": "Key",
+        "change": "change",
+        "section_mode": "2  ·  MODE",
+        "mode_click": "Click",
+        "mode_hold": "Hold",
+        "mode_desc_click": "The button or key is pressed and released immediately. Frequency is set below.",
+        "mode_desc_hold": "The button or key is held until F6 is pressed again or Stop is clicked.",
+        "section_speed": "3  ·  SPEED",
+        "frequency": "Frequency",
+        "per_second": "per second",
+        "per_second_short": "/s",
+        "press_hold": "Press duration",
+        "press_short": "Press",
+        "ms": "ms",
+        "hint_speed_click": "MAX — unlimited. The real limit depends on Windows and system load.",
+        "hint_press_click": "0 — no delay between press and release. For games, try 10–30 ms.",
+        "hint_speed_hold": "In Hold mode, frequency and hold time are not used.",
+        "hint_press_hold": "",
+        "combo_intro": "Both channels run at the same time and independently. Each has its own mode, frequency and hold time.",
+        "combo_mouse": "MOUSE",
+        "combo_keyboard": "KEYBOARD",
+        "combo_stop_hint": "Stop both channels with the Stop button or F6.",
+        "combo_hint_click": "Clicks at the selected frequency. Hold time is the pause between press and release.",
+        "combo_hint_hold": "The button is held until stop. Frequency and hold time are not used.",
+        "start": "START",
+        "stop": "STOP",
+        "status_stopped": "STOPPED",
+        "status_running": "RUNNING",
+        "status_running_combo": "RUNNING · 2 CHANNELS",
+        "status_holding": "HOLDING",
+        "rate_clicks": "{rate} clicks/s",
+        "footer_note": "F6 works globally, even when the window is minimized. If a game does not accept input, run the clicker as administrator.",
+        "status_f6_busy": "F6 IS BUSY — PRESS START",
+        "status_f6_reserved": "F6 IS RESERVED — CHOOSE ANOTHER KEY",
+        "status_win_key": "WINDOWS KEY IS NOT SUPPORTED",
+        "capture_wait": "Press a key…",
+        "status_key": "KEY: {name}",
+        "status_already_running": "CLICKER IS ALREADY RUNNING",
+        "status_error": "Error: {message}",
+        "status_language": "LANGUAGE: {language}",
+        "error_speed_number": "Enter the frequency as a number or MAX.",
+        "error_speed_range": "Frequency must be from 1 to 1,000,000.",
+        "error_press_number": "Hold time must be a number of milliseconds.",
+        "error_press_range": "Hold time: 0 to 500 ms.",
+        "error_other_key": "Choose another key.",
+        "error_input_blocked": "Windows blocked the input. Run the clicker as administrator.",
+        "prefix_mouse": "Mouse",
+        "prefix_keyboard": "Keyboard",
+        "speed_max": "MAX",
+        "settings": "Settings",
+        "settings_title": "Settings",
+        "settings_language": "Language",
+        "settings_language_hint": "Changes apply immediately and are saved automatically.",
+        "settings_about": "ABOUT",
+        "settings_about_text": "Universal Clicker v{version}\nMouse and keyboard auto-clicker for Windows.",
+        "settings_github": "Open on GitHub",
+        "settings_close": "Close",
+    },
+    "ru": {
+        "app_title": "Универсальный кликер",
+        "subtitle": "Мышь и клавиатура  ·  глобальный старт по F6",
+        "tab_single": "Одиночный",
+        "tab_combo": "Комбо",
+        "section_target": "1  ·  ЦЕЛЬ",
+        "target_mouse": "Мышь",
+        "target_keyboard": "Клавиатура",
+        "mouse_button": "Кнопка мыши",
+        "key": "Клавиша",
+        "change": "сменить",
+        "section_mode": "2  ·  РЕЖИМ",
+        "mode_click": "Клик",
+        "mode_hold": "Зажатие",
+        "mode_desc_click": "Кнопка или клавиша нажимается и сразу отпускается. Частота задаётся ниже.",
+        "mode_desc_hold": "Кнопка или клавиша зажимается и держится до повторного F6 или кнопки «Стоп».",
+        "section_speed": "3  ·  СКОРОСТЬ",
+        "frequency": "Частота",
+        "per_second": "в секунду",
+        "per_second_short": "/с",
+        "press_hold": "Удержание нажатия",
+        "press_short": "Удержание",
+        "ms": "мс",
+        "hint_speed_click": "МАКС — без ограничения. Фактический предел зависит от Windows и нагрузки.",
+        "hint_press_click": "0 — нажатие без задержки. Для игр попробуйте 10–30 мс.",
+        "hint_speed_hold": "В режиме «Зажатие» частота и удержание не используются.",
+        "hint_press_hold": "",
+        "combo_intro": "Оба канала работают одновременно и независимо. У каждого свой режим, частота и удержание.",
+        "combo_mouse": "МЫШЬ",
+        "combo_keyboard": "КЛАВИАТУРА",
+        "combo_stop_hint": "Остановить оба канала: кнопка «Стоп» или F6.",
+        "combo_hint_click": "Клики с заданной частотой. Удержание — пауза между нажатием и отпусканием.",
+        "combo_hint_hold": "Нажатие удерживается до остановки. Частота и удержание не используются.",
+        "start": "СТАРТ",
+        "stop": "ОСТАНОВИТЬ",
+        "status_stopped": "ОСТАНОВЛЕН",
+        "status_running": "РАБОТАЕТ",
+        "status_running_combo": "РАБОТАЕТ · 2 КАНАЛА",
+        "status_holding": "УДЕРЖАНИЕ",
+        "rate_clicks": "{rate} нажатий/с",
+        "footer_note": "F6 работает глобально, даже если окно свёрнуто. Если игра не принимает ввод — запустите кликер от имени администратора.",
+        "status_f6_busy": "F6 ЗАНЯТА — ЖМИТЕ «СТАРТ»",
+        "status_f6_reserved": "F6 ЗАНЯТА — ВЫБЕРИТЕ ДРУГУЮ КЛАВИШУ",
+        "status_win_key": "КЛАВИША WINDOWS НЕ ПОДДЕРЖИВАЕТСЯ",
+        "capture_wait": "Нажмите клавишу…",
+        "status_key": "КЛАВИША: {name}",
+        "status_already_running": "КЛИКЕР УЖЕ РАБОТАЕТ",
+        "status_error": "Ошибка: {message}",
+        "status_language": "ЯЗЫК: {language}",
+        "error_speed_number": "Введите частоту числом или «МАКС».",
+        "error_speed_range": "Частота должна быть от 1 до 1 000 000.",
+        "error_press_number": "Удержание задаётся числом миллисекунд.",
+        "error_press_range": "Удержание: от 0 до 500 мс.",
+        "error_other_key": "Выберите другую клавишу.",
+        "error_input_blocked": "Windows заблокировал ввод. Запустите кликер от имени администратора.",
+        "prefix_mouse": "Мышь",
+        "prefix_keyboard": "Клавиатура",
+        "speed_max": "МАКС",
+        "settings": "Настройки",
+        "settings_title": "Настройки",
+        "settings_language": "Язык",
+        "settings_language_hint": "Изменения применяются сразу и сохраняются автоматически.",
+        "settings_about": "О ПРИЛОЖЕНИИ",
+        "settings_about_text": "Universal Clicker v{version}\nАвтокликер для мыши и клавиатуры под Windows.",
+        "settings_github": "Открыть на GitHub",
+        "settings_close": "Закрыть",
+    },
+}
 
-SPEED_VALUES = (
-    "10",
-    "25",
-    "50",
-    "100",
-    "200",
-    "500",
-    "1000",
-    "2500",
-    "5000",
-    "МАКС",
-)
 
-KEY_LABELS = {
-    "space": "ПРОБЕЛ",
+def tr(lang: str, key: str, **kwargs) -> str:
+    table = STRINGS.get(lang, STRINGS[DEFAULT_LANGUAGE])
+    text = table.get(key, STRINGS[DEFAULT_LANGUAGE].get(key, key))
+    return text.format(**kwargs) if kwargs else text
+
+
+MOUSE_LABELS = {
+    "en": {"left": "Left", "right": "Right", "middle": "Middle"},
+    "ru": {"left": "Левая", "right": "Правая", "middle": "Средняя"},
+}
+
+SPEED_PRESETS = ("10", "25", "50", "100", "200", "500", "1000", "2500", "5000")
+MAX_VALUES = {"MAX", "МАКС", "МАКСИМУМ", "∞"}
+
+KEY_LABELS_EN = {
+    "space": "SPACE",
     "return": "ENTER",
     "escape": "ESC",
     "backspace": "BACKSPACE",
@@ -446,16 +610,22 @@ KEY_LABELS = {
     "num_lock": "NUM LOCK",
 }
 
+KEY_LABELS = {
+    "en": KEY_LABELS_EN,
+    "ru": {**KEY_LABELS_EN, "space": "ПРОБЕЛ"},
+}
 
-def _pretty_key(event) -> str:
-    keysym = event.keysym
-    return KEY_LABELS.get(keysym.lower(), keysym.upper())
+
+def key_label(language: str, keysym: str) -> str:
+    labels = KEY_LABELS.get(language, KEY_LABELS[DEFAULT_LANGUAGE])
+    return labels.get(keysym.lower(), keysym.upper())
 
 
 class UniversalClickerApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title(APP_TITLE)
+        self.language = load_language()
+        self.title(tr(self.language, "app_title"))
         self.configure(bg=BG)
         try:
             self.iconbitmap(resource_path("assets", "icon.ico"))
@@ -471,19 +641,18 @@ class UniversalClickerApp(tk.Tk):
         self.active_tab = "single"
         self.target = "mouse"
         self.mode = "click"
+        self.mouse_button = "left"
         self._active: Settings | list[Settings] | None = None
         self._capturing = False
         self._capture_context = "single"
         self._key_vk = 0x20
-        self._key_name = "ПРОБЕЛ"
+        self._key_sym = "space"
         self._toggle_requested = threading.Event()
         self._target_buttons: dict[str, tk.Button] = {}
         self._mode_buttons: dict[str, tk.Button] = {}
-        self._config_widgets: list[tk.Widget] = []
         self._rate_count = 0
         self._rate_time = 0.0
 
-        # вкладка «Комбо»
         self.combo_mode = {"mouse": "click", "keyboard": "click"}
         self.combo_mode_buttons: dict[str, dict[str, tk.Button]] = {
             "mouse": {},
@@ -493,12 +662,17 @@ class UniversalClickerApp(tk.Tk):
         self.combo_speed: dict[str, ttk.Combobox] = {}
         self.combo_press: dict[str, tk.Entry] = {}
         self._combo_key_vk = 0x20
-        self._combo_key_name = "ПРОБЕЛ"
-        self.combo_button_var = tk.StringVar(value=MOUSE_LABELS["left"])
+        self._combo_key_sym = "space"
+        self.combo_mouse_button = "left"
+        self.button_var = tk.StringVar()
+        self.speed_var = tk.StringVar(value="100")
+        self.press_var = tk.StringVar(value="0")
+        self.combo_button_var = tk.StringVar()
         self.combo_mouse_speed_var = tk.StringVar(value="100")
         self.combo_mouse_press_var = tk.StringVar(value="0")
         self.combo_key_speed_var = tk.StringVar(value="100")
         self.combo_key_press_var = tk.StringVar(value="0")
+        self._settings_window: tk.Toplevel | None = None
 
         self._build_style()
         self._build_ui()
@@ -515,6 +689,32 @@ class UniversalClickerApp(tk.Tk):
         self.after(120, self._tick)
         self.after(400, self._check_hotkey)
         self.after(50, self._apply_dark_titlebar)
+
+    def _t(self, key: str, **kwargs) -> str:
+        return tr(self.language, key, **kwargs)
+
+    def _mouse_label(self, code: str) -> str:
+        return MOUSE_LABELS[self.language].get(code, code)
+
+    def _mouse_code(self, label: str) -> str:
+        for code, text in MOUSE_LABELS[self.language].items():
+            if text == label:
+                return code
+        return "left"
+
+    def _key_display(self, combo: bool = False) -> str:
+        sym = self._combo_key_sym if combo else self._key_sym
+        return key_label(self.language, sym)
+
+    def _speed_values(self) -> tuple[str, ...]:
+        return (*SPEED_PRESETS, self._t("speed_max"))
+
+    def _localized_speed_value(self, value: str) -> str:
+        return self._t("speed_max") if value.strip().upper() in MAX_VALUES else value
+
+    def _format_count(self, value: float) -> str:
+        text = f"{value:,.0f}"
+        return text.replace(",", " ") if self.language == "ru" else text
 
     # -- construction -------------------------------------------------------
 
@@ -609,37 +809,76 @@ class UniversalClickerApp(tk.Tk):
         outer = tk.Frame(self, bg=BG)
         outer.pack(fill="both", expand=True, padx=26, pady=22)
 
+        header = tk.Frame(outer, bg=BG)
+        header.pack(fill="x")
+        try:
+            self._logo_image = tk.PhotoImage(
+                file=resource_path("assets", "icon.png")
+            ).subsample(24, 24)
+            tk.Label(header, image=self._logo_image, bg=BG).pack(
+                side="left", padx=(0, 12)
+            )
+        except tk.TclError:
+            self._logo_image = None
+
+        title_box = tk.Frame(header, bg=BG)
+        title_box.pack(side="left", fill="x", expand=True)
         tk.Label(
-            outer, text=APP_TITLE, bg=BG, fg=FG, font=(FONT, 20, "bold"), anchor="w"
+            title_box,
+            text=self._t("app_title"),
+            bg=BG,
+            fg=FG,
+            font=(FONT, 20, "bold"),
+            anchor="w",
         ).pack(fill="x")
         tk.Label(
-            outer,
-            text="Мышь и клавиатура  ·  глобальный старт по F6",
+            title_box,
+            text=self._t("subtitle"),
             bg=BG,
             fg=MUTED,
             font=(FONT, 9),
             anchor="w",
         ).pack(fill="x", pady=(3, 0))
 
+        self.settings_btn = tk.Button(
+            header,
+            text=f"⚙  {self._t('settings')}",
+            command=self._open_settings,
+            bg=CARD_ALT,
+            fg=FG,
+            activebackground=CARD_HOVER,
+            activeforeground=FG,
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+            font=(FONT, 9, "bold"),
+            padx=10,
+            pady=7,
+        )
+        self.settings_btn.pack(side="right", anchor="n", padx=(8, 0))
+        self._bind_hover(self.settings_btn, CARD_ALT, CARD_HOVER)
+
         self.notebook = ttk.Notebook(outer, style="Dark.TNotebook", takefocus=False)
         self.notebook.pack(fill="both", expand=True, pady=(16, 0))
         self.single_page = tk.Frame(self.notebook, bg=BG)
         self.combo_page = tk.Frame(self.notebook, bg=BG)
-        self.notebook.add(self.single_page, text="Одиночный")
-        self.notebook.add(self.combo_page, text="Комбо")
+        self.notebook.add(self.single_page, text=self._t("tab_single"))
+        self.notebook.add(self.combo_page, text=self._t("tab_combo"))
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
         body = tk.Frame(self.single_page, bg=BG)
         body.pack(fill="both", expand=True, padx=12, pady=12)
 
-        self._section(body, "1  ·  ЦЕЛЬ").pack(fill="x")
+        self._section(body, self._t("section_target")).pack(fill="x")
         target_row = tk.Frame(body, bg=BG)
         target_row.pack(fill="x", pady=(8, 0))
         self._target_buttons["mouse"] = self._choice(
-            target_row, "Мышь", lambda: self._choose_target("mouse")
+            target_row, self._t("target_mouse"), lambda: self._choose_target("mouse")
         )
         self._target_buttons["keyboard"] = self._choice(
-            target_row, "Клавиатура", lambda: self._choose_target("keyboard")
+            target_row,
+            self._t("target_keyboard"),
+            lambda: self._choose_target("keyboard"),
         )
         self._target_buttons["mouse"].pack(
             side="left", fill="x", expand=True, padx=(0, 4)
@@ -655,30 +894,34 @@ class UniversalClickerApp(tk.Tk):
         mouse_row = tk.Frame(self.mouse_pane, bg=CARD)
         mouse_row.pack(fill="x", padx=14, pady=11)
         tk.Label(
-            mouse_row, text="Кнопка мыши", bg=CARD, fg=MUTED, font=(FONT, 9)
+            mouse_row,
+            text=self._t("mouse_button"),
+            bg=CARD,
+            fg=MUTED,
+            font=(FONT, 9),
         ).pack(side="left")
-        self.button_var = tk.StringVar(value=MOUSE_LABELS["left"])
+        self.button_var.set(self._mouse_label(self.mouse_button))
         self.button_combo = ttk.Combobox(
             mouse_row,
             textvariable=self.button_var,
-            values=tuple(MOUSE_LABELS.values()),
+            values=tuple(MOUSE_LABELS[self.language].values()),
             state="readonly",
             width=11,
             style="Dark.TCombobox",
             font=(FONT, 10),
         )
         self.button_combo.pack(side="right")
-        self._config_widgets.append(self.button_combo)
+        self.button_combo.bind("<<ComboboxSelected>>", self._on_mouse_selected)
 
         self.key_pane = tk.Frame(self.detail, bg=CARD)
         key_row = tk.Frame(self.key_pane, bg=CARD)
         key_row.pack(fill="x", padx=14, pady=8)
         tk.Label(
-            key_row, text="Клавиша", bg=CARD, fg=MUTED, font=(FONT, 9)
+            key_row, text=self._t("key"), bg=CARD, fg=MUTED, font=(FONT, 9)
         ).pack(side="left")
         self.key_btn = tk.Button(
             key_row,
-            text=f"{self._key_name}  ·  сменить",
+            text=f"{self._key_display()}  ·  {self._t('change')}",
             command=self._begin_capture,
             bg=CARD_ALT,
             fg=FG,
@@ -693,16 +936,15 @@ class UniversalClickerApp(tk.Tk):
         )
         self.key_btn.pack(side="right")
         self._bind_hover(self.key_btn, CARD_ALT, CARD_HOVER)
-        self._config_widgets.append(self.key_btn)
 
-        self._section(body, "2  ·  РЕЖИМ").pack(fill="x", pady=(16, 0))
+        self._section(body, self._t("section_mode")).pack(fill="x", pady=(16, 0))
         mode_row = tk.Frame(body, bg=BG)
         mode_row.pack(fill="x", pady=(8, 0))
         self._mode_buttons["click"] = self._choice(
-            mode_row, "Клик", lambda: self._choose_mode("click")
+            mode_row, self._t("mode_click"), lambda: self._choose_mode("click")
         )
         self._mode_buttons["hold"] = self._choice(
-            mode_row, "Зажатие", lambda: self._choose_mode("hold")
+            mode_row, self._t("mode_hold"), lambda: self._choose_mode("hold")
         )
         self._mode_buttons["click"].pack(
             side="left", fill="x", expand=True, padx=(0, 4)
@@ -717,7 +959,7 @@ class UniversalClickerApp(tk.Tk):
             font=(FONT, 9),
             anchor="w",
             justify="left",
-            wraplength=480,
+            wraplength=460,
         )
         self.mode_desc.pack(fill="x", pady=(7, 0))
 
@@ -766,27 +1008,26 @@ class UniversalClickerApp(tk.Tk):
         button.bind("<Leave>", on_leave)
 
     def _build_speed_ui(self, body: tk.Frame) -> None:
-        self._section(body, "3  ·  СКОРОСТЬ").pack(fill="x", pady=(16, 0))
+        self._section(body, self._t("section_speed")).pack(fill="x", pady=(16, 0))
 
         speed_row = tk.Frame(body, bg=BG)
         speed_row.pack(fill="x", pady=(8, 0))
         tk.Label(
-            speed_row, text="Частота", bg=BG, fg=FG, font=(FONT, 10)
+            speed_row, text=self._t("frequency"), bg=BG, fg=FG, font=(FONT, 10)
         ).pack(side="left")
         tk.Label(
-            speed_row, text="в секунду", bg=BG, fg=MUTED, font=(FONT, 9)
+            speed_row, text=self._t("per_second"), bg=BG, fg=MUTED, font=(FONT, 9)
         ).pack(side="right")
-        self.speed_var = tk.StringVar(value="100")
+        self.speed_var.set(self._localized_speed_value(self.speed_var.get()))
         self.speed_combo = ttk.Combobox(
             speed_row,
             textvariable=self.speed_var,
-            values=SPEED_VALUES,
+            values=self._speed_values(),
             width=10,
             style="Dark.TCombobox",
             font=(FONT, 10),
         )
         self.speed_combo.pack(side="right", padx=(0, 6))
-        self._config_widgets.append(self.speed_combo)
 
         self.speed_hint = tk.Label(
             body,
@@ -795,19 +1036,18 @@ class UniversalClickerApp(tk.Tk):
             font=(FONT, 8),
             anchor="w",
             justify="left",
-            wraplength=480,
+            wraplength=460,
         )
         self.speed_hint.pack(fill="x", pady=(3, 0))
 
         press_row = tk.Frame(body, bg=BG)
         press_row.pack(fill="x", pady=(8, 0))
         tk.Label(
-            press_row, text="Удержание нажатия", bg=BG, fg=FG, font=(FONT, 10)
+            press_row, text=self._t("press_hold"), bg=BG, fg=FG, font=(FONT, 10)
         ).pack(side="left")
         tk.Label(
-            press_row, text="мс", bg=BG, fg=MUTED, font=(FONT, 9)
+            press_row, text=self._t("ms"), bg=BG, fg=MUTED, font=(FONT, 9)
         ).pack(side="right")
-        self.press_var = tk.StringVar(value="0")
         self.press_entry = tk.Entry(
             press_row,
             textvariable=self.press_var,
@@ -826,7 +1066,6 @@ class UniversalClickerApp(tk.Tk):
             font=(FONT, 10),
         )
         self.press_entry.pack(side="right", ipady=5)
-        self._config_widgets.append(self.press_entry)
 
         self.press_hint = tk.Label(
             body,
@@ -835,7 +1074,7 @@ class UniversalClickerApp(tk.Tk):
             font=(FONT, 8),
             anchor="w",
             justify="left",
-            wraplength=480,
+            wraplength=460,
         )
         self.press_hint.pack(fill="x", pady=(3, 0))
 
@@ -845,10 +1084,7 @@ class UniversalClickerApp(tk.Tk):
 
         tk.Label(
             body,
-            text=(
-                "Оба канала работают одновременно и независимо. "
-                "У каждого свой режим, частота и удержание."
-            ),
+            text=self._t("combo_intro"),
             bg=BG,
             fg=MUTED,
             font=(FONT, 9),
@@ -857,12 +1093,12 @@ class UniversalClickerApp(tk.Tk):
             wraplength=440,
         ).pack(fill="x")
 
-        self._build_combo_channel(body, "mouse", "МЫШЬ")
-        self._build_combo_channel(body, "keyboard", "КЛАВИАТУРА")
+        self._build_combo_channel(body, "mouse", self._t("combo_mouse"))
+        self._build_combo_channel(body, "keyboard", self._t("combo_keyboard"))
 
         tk.Label(
             body,
-            text="Остановить оба канала: кнопка «Стоп» или F6.",
+            text=self._t("combo_stop_hint"),
             bg=BG,
             fg=MUTED,
             font=(FONT, 8),
@@ -882,20 +1118,26 @@ class UniversalClickerApp(tk.Tk):
         ).pack(side="left")
 
         if channel == "mouse":
+            self.combo_button_var.set(
+                self._mouse_label(self.combo_mouse_button)
+            )
             self.combo_button_combo = ttk.Combobox(
                 head,
                 textvariable=self.combo_button_var,
-                values=tuple(MOUSE_LABELS.values()),
+                values=tuple(MOUSE_LABELS[self.language].values()),
                 state="readonly",
                 width=11,
                 style="Dark.TCombobox",
                 font=(FONT, 9),
             )
             self.combo_button_combo.pack(side="right")
+            self.combo_button_combo.bind(
+                "<<ComboboxSelected>>", self._on_combo_mouse_selected
+            )
         else:
             self.combo_key_btn = tk.Button(
                 head,
-                text=f"{self._combo_key_name}  ·  сменить",
+                text=f"{self._key_display(True)}  ·  {self._t('change')}",
                 command=lambda: self._begin_capture("combo"),
                 bg=CARD_ALT,
                 fg=FG,
@@ -913,7 +1155,10 @@ class UniversalClickerApp(tk.Tk):
 
         mode_row = tk.Frame(card, bg=CARD)
         mode_row.pack(fill="x", padx=14, pady=(2, 6))
-        for key, label in (("click", "Клик"), ("hold", "Зажатие")):
+        for key, label in (
+            ("click", self._t("mode_click")),
+            ("hold", self._t("mode_hold")),
+        ):
             button = self._choice(
                 mode_row,
                 label,
@@ -931,30 +1176,31 @@ class UniversalClickerApp(tk.Tk):
         params = tk.Frame(card, bg=CARD)
         params.pack(fill="x", padx=14, pady=(4, 6))
         tk.Label(
-            params, text="Частота", bg=CARD, fg=MUTED, font=(FONT, 9)
+            params, text=self._t("frequency"), bg=CARD, fg=MUTED, font=(FONT, 9)
         ).pack(side="left")
         speed_var = (
             self.combo_mouse_speed_var
             if channel == "mouse"
             else self.combo_key_speed_var
         )
+        speed_var.set(self._localized_speed_value(speed_var.get()))
         speed_combo = ttk.Combobox(
             params,
             textvariable=speed_var,
-            values=SPEED_VALUES,
+            values=self._speed_values(),
             width=7,
             style="Dark.TCombobox",
             font=(FONT, 9),
         )
         speed_combo.pack(side="left", padx=(7, 2))
         self.combo_speed[channel] = speed_combo
-        tk.Label(params, text="/с", bg=CARD, fg=MUTED, font=(FONT, 8)).pack(
-            side="left"
-        )
+        tk.Label(
+            params, text=self._t("per_second_short"), bg=CARD, fg=MUTED, font=(FONT, 8)
+        ).pack(side="left")
 
-        tk.Label(params, text="мс", bg=CARD, fg=MUTED, font=(FONT, 8)).pack(
-            side="right"
-        )
+        tk.Label(
+            params, text=self._t("ms"), bg=CARD, fg=MUTED, font=(FONT, 8)
+        ).pack(side="right")
         press_var = (
             self.combo_mouse_press_var
             if channel == "mouse"
@@ -980,7 +1226,7 @@ class UniversalClickerApp(tk.Tk):
         press_entry.pack(side="right", ipady=4, padx=(0, 4))
         self.combo_press[channel] = press_entry
         tk.Label(
-            params, text="Удержание", bg=CARD, fg=MUTED, font=(FONT, 9)
+            params, text=self._t("press_short"), bg=CARD, fg=MUTED, font=(FONT, 9)
         ).pack(side="right", padx=(0, 5))
 
         hint = tk.Label(
@@ -998,7 +1244,7 @@ class UniversalClickerApp(tk.Tk):
     def _build_footer(self, outer: tk.Frame) -> None:
         self.start_btn = tk.Button(
             outer,
-            text="СТАРТ   ·   F6",
+            text=f"{self._t('start')}   ·   F6",
             command=self._toggle,
             bg=ACCENT,
             fg="#ffffff",
@@ -1021,7 +1267,7 @@ class UniversalClickerApp(tk.Tk):
         self.status_dot.pack(side="left")
         self.status_label = tk.Label(
             status_row,
-            text="ОСТАНОВЛЕН",
+            text=self._t("status_stopped"),
             bg=BG,
             fg=FG,
             font=(FONT, 9, "bold"),
@@ -1034,16 +1280,13 @@ class UniversalClickerApp(tk.Tk):
 
         tk.Label(
             outer,
-            text=(
-                "F6 работает глобально, даже если окно свёрнуто. "
-                "Если игра не принимает ввод — запустите кликер от имени администратора."
-            ),
+            text=self._t("footer_note"),
             bg=BG,
             fg=MUTED,
             font=(FONT, 8),
             anchor="w",
             justify="left",
-            wraplength=480,
+            wraplength=460,
         ).pack(fill="x", pady=(7, 0))
 
     def _fit_and_center(self) -> None:
@@ -1056,8 +1299,11 @@ class UniversalClickerApp(tk.Tk):
         self.resizable(False, False)
 
     def _apply_dark_titlebar(self) -> None:
+        self._set_dark_titlebar(self)
+
+    def _set_dark_titlebar(self, window: tk.Misc) -> None:
         try:
-            hwnd = user32.GetParent(self.winfo_id())
+            hwnd = user32.GetParent(window.winfo_id())
             enabled = ctypes.c_int(1)
             for attribute in (20, 19):
                 result = ctypes.windll.dwmapi.DwmSetWindowAttribute(
@@ -1065,11 +1311,10 @@ class UniversalClickerApp(tk.Tk):
                 )
                 if result == 0:
                     break
-            width, height = self.winfo_width(), self.winfo_height()
+            width, height = window.winfo_width(), window.winfo_height()
             if width > 50 and height > 50:
-                # Windows 11 перерисовывает рамку только после изменения размера.
-                self.geometry(f"{width + 1}x{height}")
-                self.geometry(f"{width}x{height}")
+                window.geometry(f"{width + 1}x{height}")
+                window.geometry(f"{width}x{height}")
         except Exception:
             pass
 
@@ -1086,6 +1331,12 @@ class UniversalClickerApp(tk.Tk):
             return
         self.mode = mode
         self._sync_mode()
+
+    def _on_mouse_selected(self, _event=None) -> None:
+        self.mouse_button = self._mouse_code(self.button_var.get())
+
+    def _on_combo_mouse_selected(self, _event=None) -> None:
+        self.combo_mouse_button = self._mouse_code(self.combo_button_var.get())
 
     def _on_tab_changed(self, _event=None) -> None:
         try:
@@ -1126,23 +1377,13 @@ class UniversalClickerApp(tk.Tk):
             self._bind_hover(button, normal, hover)
 
         if click:
-            self.mode_desc.configure(
-                text="Кнопка или клавиша нажимается и сразу отпускается. Частота задаётся ниже."
-            )
-            self.speed_hint.configure(
-                text="МАКС — без ограничения. Фактический предел зависит от Windows и нагрузки."
-            )
-            self.press_hint.configure(
-                text="0 — нажатие без задержки. Для игр попробуйте 10–30 мс."
-            )
+            self.mode_desc.configure(text=self._t("mode_desc_click"))
+            self.speed_hint.configure(text=self._t("hint_speed_click"))
+            self.press_hint.configure(text=self._t("hint_press_click"))
         else:
-            self.mode_desc.configure(
-                text="Кнопка или клавиша зажимается и держится до повторного F6 или кнопки «Стоп»."
-            )
-            self.speed_hint.configure(
-                text="В режиме «Зажатие» частота и удержание не используются."
-            )
-            self.press_hint.configure(text="")
+            self.mode_desc.configure(text=self._t("mode_desc_hold"))
+            self.speed_hint.configure(text=self._t("hint_speed_hold"))
+            self.press_hint.configure(text=self._t("hint_press_hold"))
 
         if not self.running:
             state = "normal" if click else "disabled"
@@ -1169,19 +1410,9 @@ class UniversalClickerApp(tk.Tk):
             self._bind_hover(button, normal, hover)
 
         if click:
-            self.combo_hints[channel].configure(
-                text=(
-                    "Клики с заданной частотой. Удержание — пауза "
-                    "между нажатием и отпусканием."
-                )
-            )
+            self.combo_hints[channel].configure(text=self._t("combo_hint_click"))
         else:
-            self.combo_hints[channel].configure(
-                text=(
-                    "Нажатие удерживается до остановки. "
-                    "Частота и удержание не используются."
-                )
-            )
+            self.combo_hints[channel].configure(text=self._t("combo_hint_hold"))
         self._apply_combo_state(channel)
 
     def _apply_combo_state(self, channel: str, enabled: bool | None = None) -> None:
@@ -1236,6 +1467,10 @@ class UniversalClickerApp(tk.Tk):
             1,
             state="normal" if enabled or self.active_tab == "combo" else "disabled",
         )
+        self.settings_btn.configure(
+            state="normal" if enabled else "disabled",
+            cursor="hand2" if enabled else "arrow",
+        )
 
     def _set_status(self, text: str, color: str = MUTED) -> None:
         self.status_dot.configure(fg=color)
@@ -1244,10 +1479,10 @@ class UniversalClickerApp(tk.Tk):
     def _set_start_button(self, running: bool) -> None:
         if running:
             normal, hover = DANGER, DANGER_HOVER
-            text = "ОСТАНОВИТЬ   ·   F6"
+            text = f"{self._t('stop')}   ·   F6"
         else:
             normal, hover = ACCENT, ACCENT_HOVER
-            text = "СТАРТ   ·   F6"
+            text = f"{self._t('start')}   ·   F6"
         self.start_btn.configure(
             text=text, bg=normal, activebackground=hover
         )
@@ -1259,7 +1494,183 @@ class UniversalClickerApp(tk.Tk):
             and not self._hotkey.registered
             and not self.running
         ):
-            self._set_status("F6 ЗАНЯТА — ЖМИТЕ «СТАРТ»", DANGER)
+            self._set_status(self._t("status_f6_busy"), DANGER)
+
+    def _open_settings(self) -> None:
+        if self.running:
+            return
+        if self._settings_window is not None:
+            try:
+                self._settings_window.lift()
+                self._settings_window.focus_force()
+            except tk.TclError:
+                self._settings_window = None
+            return
+
+        window = tk.Toplevel(self)
+        self._settings_window = window
+        window.title(self._t("settings_title"))
+        window.configure(bg=BG)
+        window.transient(self)
+        window.resizable(False, False)
+        try:
+            window.iconbitmap(resource_path("assets", "icon.ico"))
+        except tk.TclError:
+            pass
+        window.protocol("WM_DELETE_WINDOW", self._close_settings)
+        window.bind("<Escape>", lambda _event: self._close_settings())
+
+        outer = tk.Frame(window, bg=BG)
+        outer.pack(fill="both", expand=True, padx=24, pady=20)
+        tk.Label(
+            outer,
+            text=self._t("settings_title"),
+            bg=BG,
+            fg=FG,
+            font=(FONT, 16, "bold"),
+            anchor="w",
+        ).pack(fill="x")
+
+        tk.Label(
+            outer,
+            text=self._t("settings_language"),
+            bg=BG,
+            fg=MUTED,
+            font=(FONT, 9),
+            anchor="w",
+        ).pack(fill="x", pady=(16, 6))
+        self.language_var = tk.StringVar(value=LANGUAGE_NAMES[self.language])
+        language_combo = ttk.Combobox(
+            outer,
+            textvariable=self.language_var,
+            values=tuple(LANGUAGE_NAMES.values()),
+            state="readonly",
+            width=18,
+            style="Dark.TCombobox",
+            font=(FONT, 10),
+        )
+        language_combo.pack(fill="x")
+        language_combo.bind("<<ComboboxSelected>>", self._select_language)
+        tk.Label(
+            outer,
+            text=self._t("settings_language_hint"),
+            bg=BG,
+            fg=MUTED,
+            font=(FONT, 8),
+            anchor="w",
+            justify="left",
+            wraplength=320,
+        ).pack(fill="x", pady=(6, 0))
+
+        tk.Frame(outer, bg=CARD_ALT, height=1).pack(fill="x", pady=(18, 14))
+        tk.Label(
+            outer,
+            text=self._t("settings_about"),
+            bg=BG,
+            fg=MUTED,
+            font=(FONT, 8, "bold"),
+            anchor="w",
+        ).pack(fill="x")
+        tk.Label(
+            outer,
+            text=self._t("settings_about_text", version=APP_VERSION),
+            bg=BG,
+            fg=FG,
+            font=(FONT, 9),
+            anchor="w",
+            justify="left",
+            wraplength=320,
+        ).pack(fill="x", pady=(6, 8))
+
+        link = tk.Label(
+            outer,
+            text=self._t("settings_github"),
+            bg=BG,
+            fg=ACCENT,
+            font=(FONT, 9, "underline"),
+            cursor="hand2",
+            anchor="w",
+        )
+        link.pack(fill="x")
+        link.bind("<Button-1>", lambda _event: webbrowser.open(REPO_URL))
+        link.bind("<Enter>", lambda _event: link.configure(fg=ACCENT_HOVER))
+        link.bind("<Leave>", lambda _event: link.configure(fg=ACCENT))
+
+        close_btn = tk.Button(
+            outer,
+            text=self._t("settings_close"),
+            command=self._close_settings,
+            bg=CARD_ALT,
+            fg=FG,
+            activebackground=CARD_HOVER,
+            activeforeground=FG,
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+            font=(FONT, 10, "bold"),
+            pady=9,
+        )
+        close_btn.pack(fill="x", pady=(18, 0))
+        self._bind_hover(close_btn, CARD_ALT, CARD_HOVER)
+
+        window.update_idletasks()
+        width = max(350, window.winfo_reqwidth())
+        height = window.winfo_reqheight()
+        x = self.winfo_rootx() + (self.winfo_width() - width) // 2
+        y = self.winfo_rooty() + (self.winfo_height() - height) // 3
+        window.geometry(f"{width}x{height}+{max(0, x)}+{max(0, y)}")
+        self._set_dark_titlebar(window)
+        window.grab_set()
+        window.focus_force()
+        language_combo.focus_set()
+
+    def _close_settings(self) -> None:
+        window = self._settings_window
+        self._settings_window = None
+        if window is None:
+            return
+        try:
+            window.grab_release()
+            window.destroy()
+        except tk.TclError:
+            pass
+
+    def _select_language(self, _event=None) -> None:
+        selected = self.language_var.get()
+        language = next(
+            (code for code, name in LANGUAGE_NAMES.items() if name == selected),
+            self.language,
+        )
+        if language == self.language:
+            return
+        self.language = language
+        save_language(language)
+        self._close_settings()
+        self._rebuild_ui()
+        self._set_status(
+            self._t("status_language", language=LANGUAGE_NAMES[language].upper()),
+            MUTED,
+        )
+
+    def _rebuild_ui(self) -> None:
+        if self._capturing:
+            self._end_capture()
+        self.title(self._t("app_title"))
+        for child in list(self.winfo_children()):
+            child.destroy()
+        self._build_ui()
+        index = 1 if self.active_tab == "combo" else 0
+        self.notebook.select(index)
+        self.active_tab = "combo" if index else "single"
+        self._sync_target()
+        self._sync_mode()
+        self._sync_combo("mouse")
+        self._sync_combo("keyboard")
+        self._apply_state()
+        self._set_start_button(False)
+        self._set_status(self._t("status_stopped"), MUTED)
+        self.rate_label.configure(text="")
+        self._fit_and_center()
 
     # -- key capture --------------------------------------------------------
 
@@ -1269,7 +1680,7 @@ class UniversalClickerApp(tk.Tk):
         self._capturing = True
         self._capture_context = context
         button = self._capture_button()
-        button.configure(text="Нажмите клавишу…", bg=ACCENT, fg="#ffffff")
+        button.configure(text=self._t("capture_wait"), bg=ACCENT, fg="#ffffff")
         self._bind_hover(button, ACCENT, ACCENT_HOVER)
         self.bind_all("<KeyPress>", self._capture_key)
         self.focus_force()
@@ -1284,21 +1695,23 @@ class UniversalClickerApp(tk.Tk):
         if vk in BLOCKED_VKS:
             self._end_capture()
             if vk == VK_F6:
-                self._set_status("F6 ЗАНЯТА — ВЫБЕРИТЕ ДРУГУЮ КЛАВИШУ", DANGER)
+                self._set_status(self._t("status_f6_reserved"), DANGER)
             else:
-                self._set_status("КЛАВИША WINDOWS НЕ ПОДДЕРЖИВАЕТСЯ", DANGER)
+                self._set_status(self._t("status_win_key"), DANGER)
             return "break"
         if not 8 <= vk <= 0xFE:
             return "break"
-        name = _pretty_key(event)
+        keysym = event.keysym.lower()
         if self._capture_context == "combo":
             self._combo_key_vk = vk
-            self._combo_key_name = name
+            self._combo_key_sym = keysym
         else:
             self._key_vk = vk
-            self._key_name = name
+            self._key_sym = keysym
         self._end_capture()
-        self._set_status(f"КЛАВИША: {name}", MUTED)
+        self._set_status(
+            self._t("status_key", name=key_label(self.language, keysym)), MUTED
+        )
         return "break"
 
     def _end_capture(self) -> None:
@@ -1310,12 +1723,12 @@ class UniversalClickerApp(tk.Tk):
             self.unbind_all("<KeyPress>")
         except tk.TclError:
             pass
-        name = (
-            self._combo_key_name
-            if self._capture_context == "combo"
-            else self._key_name
+        combo = self._capture_context == "combo"
+        button.configure(
+            text=f"{self._key_display(combo)}  ·  {self._t('change')}",
+            bg=CARD_ALT,
+            fg=FG,
         )
-        button.configure(text=f"{name}  ·  сменить", bg=CARD_ALT, fg=FG)
         self._bind_hover(button, CARD_ALT, CARD_HOVER)
 
     # -- run control --------------------------------------------------------
@@ -1330,6 +1743,8 @@ class UniversalClickerApp(tk.Tk):
         self.after(60, self._poll_hotkey)
 
     def _toggle(self) -> None:
+        if self._settings_window is not None:
+            return
         if self._capturing:
             self._end_capture()
             return
@@ -1338,39 +1753,36 @@ class UniversalClickerApp(tk.Tk):
         else:
             self._start()
 
-    @staticmethod
-    def _parse_speed(value: str) -> float:
+    def _parse_speed(self, value: str) -> float:
         raw = value.strip().upper().replace(",", ".")
-        if raw in {"МАКС", "MAX", "МАКСИМУМ", "∞"}:
+        if raw in MAX_VALUES:
             return 0.0
         try:
             cps = float(raw)
         except ValueError:
-            raise ValueError("Введите частоту числом или «МАКС».") from None
+            raise ValueError(self._t("error_speed_number")) from None
         if not 1 <= cps <= 1_000_000:
-            raise ValueError("Частота должна быть от 1 до 1 000 000.")
+            raise ValueError(self._t("error_speed_range"))
         return cps
 
-    @staticmethod
-    def _parse_press(value: str) -> float:
+    def _parse_press(self, value: str) -> float:
         raw = value.strip().replace(",", ".")
         if not raw:
             return 0.0
         try:
             press_ms = float(raw)
         except ValueError:
-            raise ValueError("Удержание задаётся числом миллисекунд.") from None
+            raise ValueError(self._t("error_press_number")) from None
         if not 0 <= press_ms <= 500:
-            raise ValueError("Удержание: от 0 до 500 мс.")
+            raise ValueError(self._t("error_press_range"))
         return press_ms
 
     def _read_channel(
         self,
         target: str,
         mode: str,
-        button_var: tk.StringVar,
+        mouse_button: str,
         vk: int,
-        key_name: str,
         speed_var: tk.StringVar,
         press_var: tk.StringVar,
     ) -> Settings:
@@ -1381,14 +1793,13 @@ class UniversalClickerApp(tk.Tk):
             press_ms = self._parse_press(press_var.get())
 
         if target == "keyboard" and vk in BLOCKED_VKS:
-            raise ValueError("Выберите другую клавишу.")
+            raise ValueError(self._t("error_other_key"))
 
         return Settings(
             target=target,
             mode=mode,
-            mouse_button=MOUSE_KEYS.get(button_var.get(), "left"),
+            mouse_button=mouse_button,
             vk=vk,
-            key_name=key_name,
             cps=cps,
             press_ms=press_ms,
         )
@@ -1397,9 +1808,8 @@ class UniversalClickerApp(tk.Tk):
         return self._read_channel(
             self.target,
             self.mode,
-            self.button_var,
+            self.mouse_button,
             self._key_vk,
-            self._key_name,
             self.speed_var,
             self.press_var,
         )
@@ -1410,31 +1820,28 @@ class UniversalClickerApp(tk.Tk):
             (
                 "mouse",
                 "mouse",
-                "Мышь",
+                self._t("prefix_mouse"),
                 self._combo_key_vk,
-                self._combo_key_name,
                 self.combo_mouse_speed_var,
                 self.combo_mouse_press_var,
             ),
             (
                 "keyboard",
                 "keyboard",
-                "Клавиатура",
+                self._t("prefix_keyboard"),
                 self._combo_key_vk,
-                self._combo_key_name,
                 self.combo_key_speed_var,
                 self.combo_key_press_var,
             ),
         )
-        for channel, target, prefix, vk, key_name, speed_var, press_var in channels:
+        for channel, target, prefix, vk, speed_var, press_var in channels:
             try:
                 configs.append(
                     self._read_channel(
                         target,
                         self.combo_mode[channel],
-                        self.combo_button_var,
+                        self.combo_mouse_button,
                         vk,
-                        key_name,
                         speed_var,
                         press_var,
                     )
@@ -1468,7 +1875,7 @@ class UniversalClickerApp(tk.Tk):
             return
 
         if not self.engine.start(settings):
-            self._set_status("КЛИКЕР УЖЕ РАБОТАЕТ", DANGER)
+            self._set_status(self._t("status_already_running"), DANGER)
             return
 
         self._active = settings
@@ -1478,13 +1885,13 @@ class UniversalClickerApp(tk.Tk):
         self._apply_state()
         self._set_start_button(True)
         if len(self._active_configs()) > 1:
-            self._set_status("РАБОТАЕТ · 2 КАНАЛА", OK)
+            self._set_status(self._t("status_running_combo"), OK)
         else:
-            self._set_status("РАБОТАЕТ", OK)
+            self._set_status(self._t("status_running"), OK)
         if self._hold_only():
-            self.rate_label.configure(text="УДЕРЖАНИЕ")
+            self.rate_label.configure(text=self._t("status_holding"))
         else:
-            self.rate_label.configure(text="0 нажатий/с")
+            self.rate_label.configure(text=self._t("rate_clicks", rate="0"))
 
     def _stop(self) -> None:
         if not self.running:
@@ -1494,7 +1901,7 @@ class UniversalClickerApp(tk.Tk):
         self._active = None
         self._apply_state()
         self._set_start_button(False)
-        self._set_status("ОСТАНОВЛЕН", MUTED)
+        self._set_status(self._t("status_stopped"), MUTED)
         self.rate_label.configure(text="")
 
     # -- periodic -----------------------------------------------------------
@@ -1508,13 +1915,21 @@ class UniversalClickerApp(tk.Tk):
             self._set_start_button(False)
             self.rate_label.configure(text="")
             if error:
-                short = error if len(error) <= 64 else error[:61] + "…"
-                self._set_status("Ошибка: " + short, DANGER)
+                message = (
+                    self._t("error_input_blocked")
+                    if error == "input_blocked"
+                    else error
+                )
+                if len(message) > 64:
+                    message = message[:61] + "…"
+                self._set_status(
+                    self._t("status_error", message=message), DANGER
+                )
             else:
-                self._set_status("ОСТАНОВЛЕН", MUTED)
+                self._set_status(self._t("status_stopped"), MUTED)
         elif self.running:
             if self._hold_only():
-                self.rate_label.configure(text="УДЕРЖАНИЕ")
+                self.rate_label.configure(text=self._t("status_holding"))
             else:
                 now = time.perf_counter()
                 elapsed = now - self._rate_time
@@ -1522,11 +1937,15 @@ class UniversalClickerApp(tk.Tk):
                     rate = (count - self._rate_count) / elapsed
                     self._rate_count = count
                     self._rate_time = now
-                    text = f"{rate:,.0f} нажатий/с".replace(",", " ")
-                    self.rate_label.configure(text=text)
+                    self.rate_label.configure(
+                        text=self._t(
+                            "rate_clicks", rate=self._format_count(rate)
+                        )
+                    )
         self.after(100, self._tick)
 
     def _on_close(self) -> None:
+        self._close_settings()
         if self._capturing:
             self._end_capture()
         self.engine.stop()
