@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.build/
+build/
+dist/
+*.spec
+UniversalClicker.exe
+.venv/
+venv/
+*.log
